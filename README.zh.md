@@ -2,6 +2,8 @@
 
 # DS Bot
 
+> 此fork的保存分支基于官方`v0.3.1`（`6559c9e7c4ef71c292e6ac50f690031133536fe0`），保存`0.3.1-local.delegation.ja.remote.2`的可选委派、固定记忆/技能复盘语言、remote身份适配器与通知标识符修改。详见[插件说明](ds-bot/README.md)。尚未merge、发布或部署；客户端/office生成物与运行依赖声明保持不变。公开源码不含机器专用Bot ID，`allowDelegation`默认为空列表；已安装插件和私有配置未改动。
+
 [English](README.md) | 中文
 
 ![版本](https://img.shields.io/badge/版本-v0.3_预览-blue) ![DSH](https://img.shields.io/badge/DSH-0.2.2--rc.1-4D6BFE) ![许可](https://img.shields.io/badge/许可-Apache_2.0-green)

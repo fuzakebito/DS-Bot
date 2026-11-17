@@ -16,9 +16,8 @@ export const GROUP_REF = { type: 'string', required: true, description: 'Exact g
 const BLOCKING_QUESTION_TOOL = 'ask_user_question'
 // DS Bot has its own group goals; DSH's session goal still does not survive conversation parts.
 const GOAL_TOOLS = ['create_goal', 'update_goal', 'get_goal']
-// DSH's delegation tools start child agents the user cannot watch or stop, and they
-// end with the conversation part that started them; Bots hand work to other Bots.
-// Agent Teams' teammates are such children too (#973).
+// Delegation stays opt-in: children belong to their parent Session rather
+// than the long-lived Bot, and are not transferred on a part switch (#973).
 const DELEGATION_TOOLS = ['subagent', 'subagent_fork', 'subagent_codex', 'subagent_claude_code', 'list_subagent_models', 'send_message', 'interrupt_agent', 'list_agents', 'workflow', 'ralph', 'spawn_teammate', 'wait_agent', 'team_task_create', 'team_task_get', 'team_task_list', 'team_task_update']
 // restrict() refuses a whole list when one name is registered in the Agent's own
 // scope, so each group is masked on its own.
@@ -48,6 +47,15 @@ const WORKING_DIRECTORY_TOOL = 'working_directory'
 
 export function install(rt) {
   const { ctx, state } = rt
+
+  // Stable Bot ids survive renames, group Sessions and conversation parts. A
+  // malformed setting fails closed; it must not turn an entire team on by accident.
+  const delegationAllowed = (agent) => {
+    const option = rt.config.allowDelegation
+    const botId = rt.selfOf(agent?.session?.id ?? agent?.id)
+    return botId !== undefined && (option === true || (Array.isArray(option) && option.every(id => typeof id === 'string' && id.trim() !== '') && option.includes(botId)))
+  }
+  const hiddenGroups = agent => delegationAllowed(agent) ? HIDDEN_TOOL_GROUPS.slice(0, 1) : HIDDEN_TOOL_GROUPS
 
   const callerBot = (exec) => rt.botOf(rt.selfOf(exec.agent?.id))
   const callerRoom = (exec) => {
@@ -805,7 +813,8 @@ export function install(rt) {
     // A Session that left the team, a scope of the wrong kind, a fresh Agent
     // for one Session, or a Bot that changed between a local route and a model
     // all start over; a wanted scope is registered again below.
-    if (held !== undefined && (!wanted || held.agent !== agent || held.relay !== relayOnly || (held.tools === true && held.local !== localBot))) {
+    const delegation = delegationAllowed(agent)
+    if (held !== undefined && (!wanted || held.agent !== agent || held.relay !== relayOnly || (held.tools === true && (held.local !== localBot || held.delegation !== delegation)))) {
       unscope(id)
       held = undefined
     }
@@ -841,6 +850,7 @@ export function install(rt) {
     held.relay = relayOnly
     held.tools = true
     held.local = localBot
+    held.delegation = delegation
     held.disposers.push(...disposers)
     scoped.set(id, held)
     // A scope made outside creation never reached a collected tool list; the
@@ -860,12 +870,16 @@ export function install(rt) {
     if (held.filtered === true || typeof agent.ctx?.on !== 'function') return
     const dispose = agent.ctx.on('system-prompt/assemble', async (_assembly, _context, next) => {
       const assembled = await next()
+      const hidden = hiddenGroups(agent).flat()
+      const sections = delegationAllowed(agent)
+        ? new Set([...hidden.map(name => `tool:${name}`), 'tool:goal'])
+        : HIDDEN_SECTIONS
       // DSH 0.2.2 adds the tool list after this waterfall (#814), so only an
       // older assembly still carries tools to drop here.
       return {
         ...assembled,
-        ...Array.isArray(assembled.tools) ? { tools: assembled.tools.filter(tool => !HIDDEN_TOOLS.includes(tool.name)) } : {},
-        sections: assembled.sections.filter(section => !HIDDEN_SECTIONS.has(section.name)),
+        ...Array.isArray(assembled.tools) ? { tools: assembled.tools.filter(tool => !hidden.includes(tool.name)) } : {},
+        sections: assembled.sections.filter(section => !sections.has(section.name)),
       }
     })
     held.filtered = true
@@ -926,7 +940,7 @@ export function install(rt) {
 
   // restrict() throws on a name this profile does not serve.
   const maskHiddenTools = (agent, held, served) => {
-    const groups = HIDDEN_TOOL_GROUPS.map(group => group.filter(name => served.has(name))).filter(group => group.length > 0)
+    const groups = hiddenGroups(agent).map(group => group.filter(name => served.has(name))).filter(group => group.length > 0)
     if (groups.length === 0) return
     // Marked after one attempt even when a group fails, so a profile that can
     // never mask it is not re-masked on every resolve.
@@ -984,11 +998,15 @@ export function install(rt) {
   // the guard refuses the question and delegation tools in any Bot Session, and a
   // goal made there is blocked.
   ctx.tools.guard((exec) => {
-    if (!rt.isBotSession(exec.agent?.id)) return undefined
+    if (!rt.isBotSession(exec.agent?.id)) {
+      // Earlier parts can retain a live Agent during a switch. They must not
+      // start or steer delegated work after the Bot has moved to a new Session.
+      return rt.selfOf(exec.agent?.id) !== undefined && DELEGATION_TOOLS.includes(exec.name) ? DELEGATION_REFUSAL : undefined
+    }
     if (exec.name === BLOCKING_QUESTION_TOOL) return `Bots cannot use ${BLOCKING_QUESTION_TOOL}. Ask with ask_user in your own chat, or ask in your reply.`
     const target = exec.arguments?.target
     if (SCHEDULE_TARGET_TOOLS.includes(exec.name) && target !== undefined && target !== 'this_session') return SCHEDULE_TARGET_REFUSAL
-    return DELEGATION_TOOLS.includes(exec.name) ? DELEGATION_REFUSAL : undefined
+    return DELEGATION_TOOLS.includes(exec.name) && !delegationAllowed(exec.agent) ? DELEGATION_REFUSAL : undefined
   })
   // Creation waits for this listener, so the Agent's first step already lacks the tool.
   ctx.on('agent/created', async ({ agent }) => {

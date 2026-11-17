@@ -83,7 +83,7 @@ export function skillSystem() {
 
 // `learned`: this Bot's learned skills, in full. `library`: every other skill on the
 // team, by name and description. `declined`: proposals the user turned down.
-export function skillRequest({ bot, lines, learned = [], library = [], declined = [], language, limit = LEARNING.learnedMax }) {
+export function skillRequest({ bot, lines, learned = [], library = [], declined = [], language, fixedLanguage, limit = LEARNING.learnedMax }) {
   const parts = [`The Bot: ${bot.name}${bot.role ? `, ${bot.role}` : ''}.`]
   parts.push(learned.length === 0
     ? 'This Bot has no learned skills yet.'
@@ -91,6 +91,7 @@ export function skillRequest({ bot, lines, learned = [], library = [], declined 
   if (library.length > 0) parts.push(`Other skills on the team:\n${library.map(skill => `- ${skill.name}: ${skill.description}`).join('\n')}`)
   if (declined.length > 0) parts.push(`Proposals the user declined. Do not propose them again unless this work shows something new:\n${declined.map(entry => `- ${entry.name}: ${entry.description}`).join('\n')}`)
   if (language) parts.push(`Write the description and the content in ${language}.`)
+  if (fixedLanguage) parts.push('Keep skill names, code, commands, paths, identifiers and exact quotations unchanged. Never propose an update only to translate a skill.')
   parts.push(`The work, oldest first ("User:" lines are the user's own words):\n<work>\n${lines.join('\n')}\n</work>`)
   return parts.join('\n\n')
 }
@@ -410,7 +411,8 @@ export function install(rt) {
       learned: learned.map(name => skills[name]),
       library,
       declined: data().declined.filter(entry => entry.kind !== 'agents'),
-      language: writtenIn(lines.filter(line => line.startsWith('User: ')).map(line => line.slice(6)), rt.uiLanguage?.()),
+      language: rt.memoryLanguage ?? writtenIn(lines.filter(line => line.startsWith('User: ')).map(line => line.slice(6)), rt.uiLanguage?.()),
+      fixedLanguage: rt.memoryLanguage,
       limit: settings.learnedMax,
     })
     const reply = await rt.botShot(bot, skillSystem(), text, { sessionId: rt.chatOf(bot.id), kind: 'memory' })

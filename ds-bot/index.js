@@ -2,6 +2,8 @@
 // Every Bot is one root Session; the roster, rooms, and the bot-to-bot exchange log live
 // in one JSON file under DSH_HOME so they survive restarts without new Session event types.
 import { join } from 'node:path'
+import { installRemoteFacade } from './remote-facade.js'
+import { reviewLanguage } from './src/host/review-language.js'
 import * as diagnostics from './src/host/diagnostics.js'
 import * as store from './src/host/store.js'
 import * as models from './src/host/models.js'
@@ -59,16 +61,19 @@ export const inject = ['llm', 'tools', 'systemPrompt', 'sessionController', 'ses
 // call before the hooks of tools do, so a closed call never reaches a card they show.
 const MODULES = [diagnostics, store, models, providers, permissions, turns, steer, handoffs, requests, delivery, roster, folders, privacy, agents, prompt, timeContext, tools, chatIndex, groups, goals, approvals, resume, memory, parts, images, avatarLibrary, secrets, connectors, capabilities, learning, schedules, browser, browserPlugins, computer, usage, update, dshUpdate, thinking, feed, im, channel, officeSkills, goalSkills, localAgents]
 
-export function apply(ctx, config = {}) {
-  createRuntime(ctx, config)
+export async function apply(ctx, config = {}) {
+  const rt = createRuntime(ctx, config)
+  await installRemoteFacade(ctx, rt)
 }
 
 export function createRuntime(ctx, config = {}) {
+  const memoryLanguage = reviewLanguage(config.reviewLanguage)
   const dshHome = folders.dshHomeOf(process.env.DSH_HOME)
   const home = config.home ?? join(dshHome, 'bot')
   const rt = {
     ctx,
     config,
+    memoryLanguage,
     dshHome,
     home,
     statePath: join(home, 'state.json'),

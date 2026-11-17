@@ -2,6 +2,8 @@
 
 # DS Bot
 
+> This fork's preservation branch is based on official `v0.3.1` (`6559c9e7c4ef71c292e6ac50f690031133536fe0`) and saves `0.3.1-local.delegation.ja.remote.2`: opt-in delegation, fixed memory/skill review language, remote identity adapter, and notification identifiers. See the [plugin notes](ds-bot/README.md). Not merged, released or deployed. Generated client/office files and runtime dependency declarations are unchanged. Machine-specific Bot IDs are excluded; the public `allowDelegation` default is an empty list. Installed code and private configuration were not changed.
+
 English | [中文](README.zh.md)
 
 ![version](https://img.shields.io/badge/version-v0.3_preview-blue) ![DSH](https://img.shields.io/badge/DSH-0.2.2--rc.1-4D6BFE) ![license](https://img.shields.io/badge/license-Apache_2.0-green)
